@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tamwheel Investor Portal</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 1. Load React & ReactDOM 17 (Stable CDN) -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+    
+    <!-- 2. Load Prop-Types (Required dependency) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+    
+    <!-- 3. Load Recharts (Switched to cdnjs and v2.1.9 for better stability) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.1.9/Recharts.min.js"></script>
+    
+    <!-- 4. Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 5. Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        // --- ICON COMPONENT ---
+        const Icon = ({ name, className, size = 24 }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            });
+            return <i data-lucide={name} className={className} style={{ width: size, height: size, display: 'inline-block' }}></i>;
+        };
+
+        // --- DATA CONSTANTS ---
+        const BASE_DATA = {
+            years: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5'],
+            activeSellers: [75, 525, 1725, 4125, 7625],
+            volumeUSD: [45000000, 472500000, 2251125000, 7536375000, 18806681250],
+            revSubscription: [550000, 1249500, 2568825, 5255637, 11000291], 
+            cogs: [798000, 893048, 1065941, 1302490, 1681188],
+            opexHR: [1392525, 2534956, 3450369, 4691463, 5865927],
+            opexCAC: [117453, 446893, 1214522, 2719096, 4880203],
+            opexIncentives: [45000, 570025, 2028289, 5398918, 10926469],
+            opexRegulatory: [530000, 25000, 25000, 25000, 25000],
+        };
+
+        const OPTIMISTIC_DATA = {
+            years: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5'],
+            activeSellers: [100, 640, 2080, 4960, 9160], 
+            volumeUSD: [70000000, 694400000, 3385200000, 11704980000, 30263037000],
+            revSubscription: [1140000, 2883400, 5480954, 10211625, 21129766], 
+        };
+
+        const PESSIMISTIC_DATA = {
+            years: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5'],
+            activeSellers: [50, 410, 1370, 3290, 6090], 
+            volumeUSD: [25000000, 297250000, 1390550000, 4508122500, 10848269250],
+            revSubscription: [200000, 470000, 1117000, 2582027, 5899437],
+        };
+
+        const SECTOR_DATA = [
+            { name: 'Construction', value: 9.5, fill: '#3b82f6', desc: '120+ Day Payment Terms' },
+            { name: 'Medical', value: 9.0, fill: '#14b8a6', desc: 'Govt (NUPCO) Buyers' },
+            { name: 'Industrial', value: 8.5, fill: '#6366f1', desc: 'Aramco Supply Chain' },
+            { name: 'Logistics', value: 7.5, fill: '#94a3b8', desc: 'High Volume, Low Ticket' },
+            { name: 'Retail (B2C)', value: 4.0, fill: '#cbd5e1', desc: 'Excluded (Cash Based)' },
+        ];
+
+        const formatCurrency = (val) => {
+            if (val === undefined || val === null || isNaN(val)) return '$0';
+            const absVal = Math.abs(val);
+            if (absVal >= 1000000000) return `$${(val / 1000000000).toFixed(1)}B`;
+            if (absVal >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+            if (absVal >= 1000) return `$${(val / 1000).toFixed(0)}k`;
+            return `$${val.toFixed(0)}`;
+        };
+
+        // --- MAIN APP ---
+        function TamwheelPortal() {
+            // 1. Loading State Management
+            const [librariesLoaded, setLibrariesLoaded] = useState(false);
+            const [loadError, setLoadError] = useState(false);
+
+            useEffect(() => {
+                if (window.Recharts) {
+                    setLibrariesLoaded(true);
+                    return;
+                }
+                
+                const checkInterval = setInterval(() => {
+                    if (window.Recharts) {
+                        setLibrariesLoaded(true);
+                        clearInterval(checkInterval);
+                    }
+                }, 100);
+
+                const timeoutId = setTimeout(() => {
+                    clearInterval(checkInterval);
+                    if (!window.Recharts) {
+                        console.error("Recharts library failed to load.");
+                        setLoadError(true);
+                    }
+                }, 10000);
+
+                return () => {
+                    clearInterval(checkInterval);
+                    clearTimeout(timeoutId);
+                };
+            }, []);
+
+            if (loadError) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500">
+                        <p className="text-red-500 font-bold mb-2">Error Loading Chart Library</p>
+                        <p className="text-sm">Please check your internet connection or try refreshing the page.</p>
+                        <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Reload</button>
+                    </div>
+                );
+            }
+
+            if (!librariesLoaded) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                        <p>Loading Financial Model...</p>
+                    </div>
+                );
+            }
+
+            const Recharts = window.Recharts;
+
+            return <DashboardContent Recharts={Recharts} />;
+        }
+
+        // --- DASHBOARD CONTENT COMPONENT ---
+        function DashboardContent({ Recharts }) {
+            const { 
+                LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+                BarChart, Bar, PieChart, Pie, Cell 
+            } = Recharts;
+
+            const [scenario, setScenario] = useState('Base');
+            const [takeRate, setTakeRate] = useState(1.0); 
+            const [targetSellersY5, setTargetSellersY5] = useState(7625); 
+            const [securitizationVol, setSecuritizationVol] = useState(20); 
+            const [securitizationFee, setSecuritizationFee] = useState(0.0); 
+            const [exitMultiple, setExitMultiple] = useState(15);
+            const [expandedRows, setExpandedRows] = useState(true); 
+
+            const currentData = useMemo(() => {
+                if (scenario === 'Optimistic') return OPTIMISTIC_DATA;
+                if (scenario === 'Pessimistic') return PESSIMISTIC_DATA;
+                return BASE_DATA;
+            }, [scenario]);
+
+            useEffect(() => {
+                if (scenario === 'Optimistic') {
+                    setTargetSellersY5(9160); setTakeRate(1.5); setSecuritizationVol(41); 
+                } else if (scenario === 'Pessimistic') {
+                    setTargetSellersY5(6090); setTakeRate(0.5); setSecuritizationVol(14); 
+                } else {
+                    setTargetSellersY5(7625); setTakeRate(1.0); setSecuritizationVol(22); 
+                }
+            }, [scenario]);
+
+            const calculatedFinancials = useMemo(() => {
+                const scenarioDefaultSellersY5 = currentData.activeSellers[4] || 1;
+                const sellerScaler = targetSellersY5 / scenarioDefaultSellersY5;
+
+                return currentData.years.map((year, index) => {
+                    const baseVol = currentData.volumeUSD?.[index] || 0;
+                    const baseSellers = currentData.activeSellers?.[index] || 0;
+                    const baseSubscription = currentData.revSubscription?.[index] || 0;
+
+                    const adjustedVolume = baseVol * sellerScaler;
+                    const adjustedSellers = baseSellers * sellerScaler;
+                    
+                    const revTakeRate = adjustedVolume * (takeRate / 100);
+                    const revSecuritization = adjustedVolume * (securitizationVol / 100) * (securitizationFee / 100);
+                    const revSub = baseSubscription;
+                    
+                    const totalRevenue = revTakeRate + revSecuritization + revSub;
+                    
+                    const baseDataSellers = BASE_DATA.activeSellers[index] || 1;
+                    const unitCostCOGS = (BASE_DATA.cogs?.[index] || 0) / baseDataSellers;
+                    const unitCostCAC = (BASE_DATA.opexCAC?.[index] || 0) / baseDataSellers;
+                    const unitCostIncentives = (BASE_DATA.opexIncentives?.[index] || 0) / baseDataSellers;
+
+                    const costCOGS = unitCostCOGS * adjustedSellers;
+                    const costCAC = unitCostCAC * adjustedSellers;
+                    const costIncentives = unitCostIncentives * adjustedSellers;
+
+                    const baseHR = BASE_DATA.opexHR?.[index] || 0;
+                    const costHR = (baseHR * 0.8) + ((baseHR * 0.2) * (adjustedSellers / baseDataSellers));
+                    const costRegulatory = BASE_DATA.opexRegulatory?.[index] || 0;
+
+                    const grossProfit = totalRevenue - costCOGS;
+                    const totalOpEx = costHR + costCAC + costIncentives + costRegulatory;
+                    const ebitda = grossProfit - totalOpEx;
+
+                    return {
+                        year,
+                        Volume: adjustedVolume,
+                        RevenueTotal: totalRevenue,
+                        RevTakeRate: revTakeRate,
+                        RevSecuritization: revSecuritization,
+                        RevSubscription: revSub,
+                        GrossProfit: grossProfit,
+                        CostCOGS: costCOGS,
+                        CostHR: costHR,
+                        CostCAC: costCAC,
+                        CostIncentives: costIncentives,
+                        CostRegulatory: costRegulatory,
+                        TotalCosts: totalOpEx + costCOGS,
+                        EBITDA: ebitda,
+                        ActiveSellers: adjustedSellers
+                    };
+                });
+            }, [currentData, takeRate, securitizationVol, securitizationFee, targetSellersY5]);
+
+            const year5Stats = calculatedFinancials[4] || { RevenueTotal: 0, EBITDA: 0, Volume: 0 };
+
+            const clientMix = [
+                { name: 'Whales (>150M)', value: 40, color: '#1e3a8a' }, 
+                { name: 'Sharks (40-150M)', value: 35, color: '#3b82f6' }, 
+                { name: 'Dolphins (3-40M)', value: 25, color: '#93c5fd' }, 
+            ];
+
+            const StatCard = ({ title, value, subtext, trend }) => (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                    <div className="text-slate-500 text-sm font-medium mb-1">{title}</div>
+                    <div className="text-3xl font-bold text-slate-800">{value}</div>
+                    <div className={`text-sm mt-2 flex items-center ${trend === 'up' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {trend === 'up' && <Icon name="trending-up" className="w-4 h-4 mr-1" size={16} />}
+                        {subtext}
+                    </div>
+                </div>
+            );
+
+            const SectionHeading = ({ children, align = "center" }) => (
+                <h2 className={`text-3xl font-bold text-slate-900 mb-6 ${align === "center" ? "text-center" : ""}`}>
+                    {children}
+                </h2>
+            );
+
+            return (
+                <div className="min-h-screen">
+                    {/* HERO */}
+                    <header className="bg-slate-900 text-white pt-24 pb-32 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none">
+                            <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                                <path fill="#ffffff" d="M44.7,-76.4C58.9,-69.2,71.8,-59.1,81.6,-46.6C91.4,-34.1,98.2,-19.2,95.8,-5.2C93.5,8.9,82,22.1,70.9,33.1C59.8,44.1,49.1,52.9,37.6,60.3C26.1,67.7,13.8,73.7,0.8,72.3C-12.2,70.9,-25.6,62.1,-37.5,53.2C-49.4,44.3,-59.8,35.3,-67.7,24.1C-75.6,12.9,-81,-0.5,-78.3,-12.6C-75.6,-24.7,-64.8,-35.5,-53.2,-44.1C-41.6,-52.7,-29.2,-59.1,-16.4,-61.8C-3.6,-64.5,10,-63.5,30.5,-76.4Z" transform="translate(100 100)" />
+                            </svg>
+                        </div>
+                        <div className="max-w-6xl mx-auto px-6 relative z-10">
+                            <div className="flex flex-col md:flex-row items-center gap-12">
+                                <div className="md:w-3/5">
+                                    <div className="inline-block bg-teal-500/20 text-teal-300 px-3 py-1 rounded-full text-xs font-bold tracking-wider mb-6 border border-teal-500/30">SERIES A ROUND</div>
+                                    <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6">Powering the <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400">Supply Chain</span> of Vision 2030.</h1>
+                                    <p className="text-lg text-slate-300 mb-8 max-w-xl leading-relaxed">The first multi-bank, digital factoring platform solving the <strong>SAR 383 Billion</strong> liquidity gap for Saudi Arabia’s industrial and construction leaders.</p>
+                                    <div className="flex gap-4">
+                                        <button onClick={() => document.getElementById('dashboard-section').scrollIntoView({ behavior: 'smooth' })} className="bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-lg transition-colors flex items-center">
+                                            Interactive Model <Icon name="arrow-right" className="ml-2 w-5 h-5" size={20} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="md:w-2/5 w-full">
+                                    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-6 shadow-xl">
+                                        <h3 className="text-slate-400 text-sm uppercase tracking-wide mb-4">The Market Opportunity (2025)</h3>
+                                        <div className="space-y-6">
+                                            <div><div className="flex justify-between items-end mb-1"><span className="text-3xl font-bold text-white">120+ Days</span></div><div className="text-slate-400 text-sm">Avg. payment delay in Construction</div></div>
+                                            <div className="h-px bg-slate-700 w-full"></div>
+                                            <div><div className="flex justify-between items-end mb-1"><span className="text-3xl font-bold text-teal-400">$102B</span></div><div className="text-slate-400 text-sm">SME Financing extended Q1 2025 (+31% YoY)</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* MARKET ANALYSIS */}
+                    <section className="py-20 bg-slate-50">
+                        <div className="max-w-6xl mx-auto px-6">
+                            <SectionHeading>The Market Reality</SectionHeading>
+                            <p className="text-center text-slate-500 max-w-2xl mx-auto mb-12">Saudi Arabia's SME market is large (1.3M entities), but "Factorability" is highly concentrated.</p>
+                            <div className="grid md:grid-cols-2 gap-12 items-center">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                        <Icon name="globe" className="w-8 h-8 text-blue-500 mb-3" size={32} />
+                                        <div className="text-2xl font-bold text-slate-800">1.3 Million</div>
+                                        <div className="text-sm text-slate-500">Active SMEs in KSA</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                        <Icon name="landmark" className="w-8 h-8 text-teal-500 mb-3" size={32} />
+                                        <div className="text-2xl font-bold text-slate-800">$102B</div>
+                                        <div className="text-sm text-slate-500">Financed in Q1 2025</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                        <Icon name="target" className="w-8 h-8 text-indigo-500 mb-3" size={32} />
+                                        <div className="text-2xl font-bold text-slate-800">Riyadh</div>
+                                        <div className="text-sm text-slate-500">33% Geographic Concentration</div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                        <Icon name="shield-check" className="w-8 h-8 text-emerald-500 mb-3" size={32} />
+                                        <div className="text-2xl font-bold text-slate-800">Govt</div>
+                                        <div className="text-sm text-slate-500">Safest Debtor, Slowest Payer</div>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200 h-80">
+                                    <h3 className="font-bold text-slate-800 mb-4">Sector Factorability Score (0-10)</h3>
+                                    <ResponsiveContainer width="100%" height="90%">
+                                        <BarChart data={SECTOR_DATA} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                            <XAxis type="number" domain={[0, 10]} hide />
+                                            <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
+                                            <Tooltip cursor={{fill: 'transparent'}} wrapperStyle={{ outline: 'none' }} />
+                                            <Bar dataKey="value" barSize={20} radius={[0, 4, 4, 0]}>
+                                                {SECTOR_DATA.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* DASHBOARD */}
+                    <section id="dashboard-section" className="py-20 bg-slate-100 border-t border-slate-200">
+                        <div className="max-w-7xl mx-auto px-6">
+                            <div className="flex flex-col md:flex-row justify-between items-end mb-10">
+                                <div>
+                                    <h2 className="text-3xl font-bold text-slate-900">Investor Dashboard</h2>
+                                    <p className="text-slate-500 mt-2">Adjust assumptions to stress-test the business model.</p>
+                                </div>
+                                <div className="bg-white p-1 rounded-lg border border-slate-300 shadow-sm flex mt-4 md:mt-0">
+                                    {['Pessimistic', 'Base', 'Optimistic'].map((s) => (
+                                        <button key={s} onClick={() => setScenario(s)} className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${scenario === s ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{s} Case</button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                                {/* CONTROLS */}
+                                <div className="lg:col-span-1 space-y-6">
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                        <div className="flex items-center text-slate-800 font-bold mb-6 border-b border-slate-100 pb-3"><Icon name="sliders" className="w-5 h-5 mr-2" size={20} /> Key Drivers</div>
+                                        <div className="mb-6">
+                                            <div className="flex justify-between text-sm mb-2"><span className="text-slate-700 font-medium">Sellers (Year 5)</span><span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{targetSellersY5.toLocaleString()}</span></div>
+                                            <input type="range" min="1000" max="15000" step="100" value={targetSellersY5} onChange={(e) => setTargetSellersY5(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                        </div>
+                                        <div className="mb-6">
+                                            <div className="flex justify-between text-sm mb-2"><span className="text-slate-700 font-medium">Take Rate (%)</span><span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{takeRate.toFixed(2)}%</span></div>
+                                            <input type="range" min="0.5" max="1.5" step="0.05" value={takeRate} onChange={(e) => setTakeRate(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800 text-white p-6 rounded-xl shadow-lg">
+                                        <div className="flex items-center font-bold mb-4 text-emerald-400"><Icon name="activity" className="w-5 h-5 mr-2" size={20} /> Live Impact</div>
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center border-b border-slate-700 pb-2"><span className="text-sm text-slate-400">Y5 Revenue</span><span className="font-mono font-bold text-emerald-400">{formatCurrency(year5Stats.RevenueTotal)}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-sm text-slate-400">Y5 EBITDA</span><span className="font-mono font-bold text-white">{formatCurrency(year5Stats.EBITDA)}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* CHARTS & DATA */}
+                                <div className="lg:col-span-3 space-y-6">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <StatCard title="Y5 Revenue" value={formatCurrency(year5Stats.RevenueTotal)} subtext="driven by volume" trend="up" />
+                                        <StatCard title="Y5 EBITDA" value={formatCurrency(year5Stats.EBITDA)} subtext={`${year5Stats.RevenueTotal > 0 ? ((year5Stats.EBITDA / year5Stats.RevenueTotal) * 100).toFixed(0) : 0}% Margin`} trend="up" />
+                                        <StatCard title="Total Volume (Y5)" value={formatCurrency(year5Stats.Volume)} subtext="Gross Financed" trend="up" />
+                                        <StatCard title="LTV / CAC" value="50x" subtext="Efficiency" trend="up" />
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="font-bold text-slate-800 flex items-center"><Icon name="bar-chart-3" className="w-5 h-5 mr-2 text-slate-500" size={20} /> Revenue vs. OpEx Scaling</h3>
+                                            <div className="flex gap-4 text-sm"><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-blue-500 mr-2"></span>Revenue</div><div className="flex items-center"><span className="w-3 h-3 rounded-full bg-slate-300 mr-2"></span>OpEx</div></div>
+                                        </div>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={calculatedFinancials} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                <XAxis dataKey="year" axisLine={false} tickLine={false} />
+                                                <YAxis tickFormatter={(val) => `$${val/1000000}M`} axisLine={false} tickLine={false} />
+                                                <Tooltip formatter={(val) => formatCurrency(val)} contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                                <Area type="monotone" dataKey="RevenueTotal" stroke="#3b82f6" fillOpacity={1} fill="url(#colorRev)" strokeWidth={3} />
+                                                <Area type="monotone" dataKey="TotalCosts" stroke="#cbd5e1" fill="#f1f5f9" fillOpacity={0.8} strokeWidth={2} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* P&L TABLE */}
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center cursor-pointer" onClick={() => setExpandedRows(!expandedRows)}>
+                                            <h3 className="font-bold text-slate-800">Pro-Forma P&L Summary</h3>
+                                            <div className="text-slate-500 flex items-center text-sm">{expandedRows ? 'Hide Details' : 'Show Details'} {expandedRows ? <Icon name="chevron-up" className="w-4 h-4 ml-1" size={16} /> : <Icon name="chevron-down" className="w-4 h-4 ml-1" size={16} />}</div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-right">
+                                                <thead>
+                                                    <tr className="text-slate-500 border-b border-slate-100">
+                                                        <th className="text-left py-3 px-6 font-medium">Metric (USD)</th>
+                                                        {calculatedFinancials.map(d => <th key={d.year} className="py-3 px-4 font-medium">{d.year}</th>)}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr className="group hover:bg-slate-50 font-bold bg-blue-50/30">
+                                                        <td className="text-left py-3 px-6 text-slate-900">Total Revenue</td>
+                                                        {calculatedFinancials.map(d => <td key={d.year} className="py-3 px-4 text-slate-900">{formatCurrency(d.RevenueTotal)}</td>)}
+                                                    </tr>
+                                                    {expandedRows && (
+                                                        <React.Fragment>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-500 pl-10 border-l-4 border-blue-100">EPS/WLS Subscription</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-500">{formatCurrency(d.RevSubscription)}</td>)}</tr>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-500 pl-10 border-l-4 border-blue-100">Financing Take Rate</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-500">{formatCurrency(d.RevTakeRate)}</td>)}</tr>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-500 pl-10 border-l-4 border-blue-100">Secondary Mkt Fees</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-500">{formatCurrency(d.RevSecuritization)}</td>)}</tr>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-400 pl-10">(-) COGS (Tech & Hosting)</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-400">({formatCurrency(d.CostCOGS)})</td>)}</tr>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-400 pl-10">(-) OpEx: HR</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-400">({formatCurrency(d.CostHR)})</td>)}</tr>
+                                                            <tr className="group hover:bg-slate-50 text-xs"><td className="text-left py-2 px-6 text-slate-400 pl-10">(-) OpEx: CAC & Mktg</td>{calculatedFinancials.map((d) => <td key={d.year} className="py-2 px-4 text-slate-400">({formatCurrency(d.CostCAC)})</td>)}</tr>
+                                                        </React.Fragment>
+                                                    )}
+                                                    <tr className="group hover:bg-slate-50 font-bold border-t border-slate-200">
+                                                        <td className="text-left py-3 px-6 text-emerald-700">EBITDA</td>
+                                                        {calculatedFinancials.map(d => <td key={d.year} className="py-3 px-4 text-emerald-600">{formatCurrency(d.EBITDA)}</td>)}
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* EXIT CALCULATOR */}
+                    <section className="py-16 bg-slate-900 text-white">
+                        <div className="max-w-4xl mx-auto px-6">
+                            <SectionHeading align="center"><span className="text-white">Exit Potential Calculator</span></SectionHeading>
+                            <p className="text-center text-slate-400 mb-10">Estimate the potential Enterprise Value at exit (Year 5) based on current EBITDA projections.</p>
+                            <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl">
+                                <div className="grid md:grid-cols-2 gap-10 items-center">
+                                    <div>
+                                        <div className="mb-6">
+                                            <div className="flex justify-between text-sm mb-2 text-slate-300"><span>EBITDA Multiple</span><span className="font-bold text-teal-400 text-lg">{exitMultiple}x</span></div>
+                                            <input type="range" min="5" max="25" step="1" value={exitMultiple} onChange={(e) => setExitMultiple(parseInt(e.target.value))} className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500" />
+                                            <div className="flex justify-between text-xs text-slate-500 mt-2"><span>5x (Conservative)</span><span>15x (SaaS Avg)</span><span>25x (High Growth)</span></div>
+                                        </div>
+                                        <div className="p-4 bg-slate-700/50 rounded-lg border border-slate-600"><div className="text-sm text-slate-400 mb-1">Based on {scenario} Case EBITDA (Y5)</div><div className="text-xl font-mono font-bold text-white">{formatCurrency(year5Stats.EBITDA)}</div></div>
+                                    </div>
+                                    <div className="text-center md:text-right">
+                                        <div className="text-slate-400 text-sm uppercase tracking-wider mb-2">Implied Exit Valuation</div>
+                                        <div className="text-5xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">{formatCurrency(year5Stats.EBITDA * exitMultiple)}</div>
+                                        <div className="mt-4 inline-flex items-center px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30">{exitMultiple}x MULTIPLE APPLIED</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <footer className="bg-slate-950 text-slate-500 py-12 border-t border-slate-900">
+                        <div className="max-w-6xl mx-auto px-6 text-center">
+                            <div className="mb-4 font-bold text-white text-xl">TAMWHEEL</div>
+                            <p className="mb-8 max-w-lg mx-auto text-sm">CONFIDENTIAL - FOR INVESTOR USE ONLY.<br/>Projections based on 2025 Market Research & Financial Models.</p>
+                            <div className="text-xs text-slate-600">&copy; 2025 Tamwheel. All rights reserved.</div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<TamwheelPortal />, document.getElementById('root'));
+    </script>
+</body>
+</html>
